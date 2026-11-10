@@ -45,7 +45,7 @@ def matrix_html():
     for t in m["tracks"]:
         cells = "".join(f'<td><span class="tag {cls[c[0]]}">{c[0]}</span><span class="line">{html.escape(c[1])}</span></td>' for c in t["cells"])
         rows += f'<tr><th><a href="{t["slug"]}.html">{t["name"]}</a></th>{cells}</tr>'
-    return f'<h2>六条赛道 × 四个时间维度</h2><div class="tablewrap"><table class="matrix"><thead><tr><th>赛道</th>{head}</tr></thead><tbody>{rows}</tbody></table></div><p class="note">{html.escape(m["rule"])}</p>'
+    return f'<h2>七条赛道 × 四个时间维度</h2><div class="tablewrap"><table class="matrix"><thead><tr><th>赛道</th>{head}</tr></thead><tbody>{rows}</tbody></table></div><p class="note">{html.escape(m["rule"])}</p>'
 
 def split_changelog(body):
     parts = re.split(r"\n## 变更记录\n", body)
