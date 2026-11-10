@@ -1,0 +1,10 @@
+# Never commit unsanitized material. The raw export lives OUTSIDE this repo
+# at ../pe-trends-raw/ and must never be copied in or committed.
+pe-trends-raw/
+*raw*
+denylist*
+*.tgz
+.DS_Store
+__pycache__/
+PUBLISH.md
+site_html/

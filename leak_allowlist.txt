@@ -1,0 +1,8 @@
+# Reviewed false positives: public facts about listed/public companies or generic wording.
+# Each line is an exact substring; a hit is suppressed only if the line contains one of these.
+SpaceX 2026-06-12 纳斯达克上市，发行估值
+Quantinuum IPO 估值 156 亿美元
+诺瓦聚变投后超过百亿元（经济参考报
+诺瓦聚变在首次放电前投后就超过百亿元（经济参考报
+资本：示范堆立项
+示范堆（CFEDR）立项或招标
