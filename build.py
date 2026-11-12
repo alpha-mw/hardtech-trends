@@ -18,7 +18,15 @@ STAGE_LEGEND = '展示码主码后的括号表示该赛道细分码的跨度，�
 CATEGORIES = {'国产替代': 'domestic', '自主可控': 'sovereign', '未来产业': 'future'}
 LABELS = {'值得看': 'go', '观察': 'watch', '不看': 'no'}
 CODES = ['S0', 'S1a', 'S1b', 'S2', 'S3a', 'S3b']
-CSS_VERSION = '20261112-svg1'
+CSS_VERSION = '20261112-legend1'
+STAGE_DEFINITIONS = {
+    'S0': ('始局前', ('萌芽：国产处于研发或样品，无量产订单', '有需求、无能力，依赖进口或空白', '科学验证：路线未收敛，在实验室或论文')),
+    'S1a': ('始局', ('替代导入：首批认证或小批量，靠安全诉求而非性价比', '从无到有：首次实现（首飞成功、首颗入轨、型号定型）', '工程验证：首个工程节点')),
+    'S1b': ('始局', ('替代放量：国内份额快速上升，仍以内需为主', '成体系：批量交付、组网、多家供给', '早期商业化：订单可重复')),
+    'S2': ('现局', ('国产优化：成本、良率 / 性能追平龙头', '降本商业化：单位成本向国际一线收敛，商业客户成为主力', '并跑领跑：中国头部达到全球前列')),
+    'S3a': ('终局', ('全球输出：借产业链与成本优势出口', '对外提供：为海外客户提供发射、卫星或服务', '标准与生态输出：掌握话语权')),
+    'S3b': ('终局', ('内卷出清：增量见顶，价格战、过剩', '成熟出清：发射价格战、产能过剩、民营整合', '商品化：成本曲线变平，价格战、出清')),
+}
 CATEGORY_COLORS = {'domestic': '#245fc4', 'sovereign': '#087d73', 'future': '#7846ba', 'neutral': '#606a7c'}
 JUDGMENT_COLORS = {'go': ('#8c4b12', '#fff0ce'), 'watch': ('#685913', '#f5f1d9'),
                    'no': ('#606974', '#e9edf2'), 'invalid': ('#606974', '#e9edf2')}
@@ -112,8 +120,9 @@ def svg_open(width, height, label, marker):
     return f'<svg xmlns="http://www.w3.org/2000/svg" class="chart {marker}" viewBox="0 0 {width} {height}" width="{width}" height="{height}" role="img" aria-label="{esc(label)}"><title>{esc(label)}</title>'
 
 
-def txt(x, y, value, extra='', fill='#202d40'):
-    return f'<text x="{x}" y="{y}" fill="{fill}" {extra}>{esc(value)}</text>'
+def txt(x, y, value, extra='', fill='#202d40', title=None):
+    tooltip = f'<title>{esc(title)}</title>' if title is not None else ''
+    return f'<text x="{x}" y="{y}" fill="{fill}" {extra}>{tooltip}{esc(value)}</text>'
 
 
 def category_badges(categories):
@@ -133,6 +142,55 @@ def judgment_badge(label):
     return f'<span class="tag {cls}" style="display:inline-block;margin-right:10px;padding:2px 7px;border-radius:5px;color:{fg};background:{bg}">{esc(label)}</span>'
 
 
+def stage_meaning(code, category=None):
+    level, definitions = STAGE_DEFINITIONS[code]
+    meanings = [f'{cat}：{definition}' for cat, definition in zip(CATEGORIES, definitions)
+                if category is None or category == cat]
+    return f'{code} · {level} · ' + '；'.join(meanings)
+
+
+def code_guide():
+    headers = ''.join(f'<th scope="col">{number} {category_badges([cat])}</th>'
+                      for number, cat in zip('①②③', CATEGORIES))
+    rows = ''.join(f'<tr><th scope="row">{code}</th><td>{esc(level)}</td>'
+                   + ''.join(f'<td>{esc(definition)}</td>' for definition in definitions) + '</tr>'
+                   for code, (level, definitions) in STAGE_DEFINITIONS.items())
+    table = '<table class="code-table"><thead><tr><th scope="col">码</th><th scope="col">层次</th>' + headers + '</tr></thead><tbody>' + rows + '</tbody></table>'
+    return '''<h2>编码说明</h2><div id="code-guide"><details open><summary>怎么读类别、阶段码和颜色</summary>
+<p>本页用两套公开口径：赛道类别（① 国产替代、② 自主可控、③ 未来产业）和细分阶段码 S0–S3b（始局 / 现局 / 终局）。三类共用同一套阶段码，各自定义始局、现局、终局。阶段码为产业结构研究口径，非投资建议，不反映任何持仓。按类别配色，不按阶段着色。</p>
+<h3>一、三种类别，以及怎么按三问归类</h3>
+<p>① 国产替代。终局 = 国产在成本和技术上超越国际龙头，再借产业链优势出口（新能源车今天的位置）。</p>
+<p>② 自主可控。终局 = 体系自主可保障，成本降到国际一线可比后，对外提供产品和服务（国际发射、海外星座服务）。出口占比天然低于国产替代，S3a 的门槛相应降低。</p>
+<p>③ 未来产业。终局 = 中国在关键技术指标上全球领先，并通过标准、开源生态或海外采用掌握话语权，商业化成规模。</p>
+<p>三问（按顺序，命中即停）：</p>
+<ol>
+<li>全球有没有成熟的商业方案？没有，或中外基本同时起跑、竞争的是谁先突破和谁定标准 → ③ 未来产业。</li>
+<li>有成熟方案，主要买单方是谁？国家、军方或安全需求主导采购，商业性价比不是首要驱动（「人有我也要有」） → ② 自主可控。</li>
+<li>有成熟方案，主要由市场客户按性价比和认证采购，国产靠成本、性能和供应安全逐步替代 → ① 国产替代。海外方案因管制对中国不可得，但买方仍是市场客户的，归国产替代，不归自主可控。</li>
+</ol>
+<p>归类按细分拆，不按公司拆，也不按大行业拆。混合赛道按类别分开展示，不合并成一个码。</p>
+<h3>二、阶段码 S0–S3b（始局 / 现局 / 终局）</h3>
+<p>同一套码，三类的名称和一句话定义不同。展示码主码后的括号表示该赛道细分码的跨度，不是单一精确读数；各细分的推定码见分布图。</p>
+''' + scroll(table) + '''
+<h3>三、「推定」和「尚未定码」</h3>
+<p>推定：落档依据只有二手来源。本页阶段码均为推定。</p>
+<p>尚未定码：该细分还没有给出阶段码，只作观察登记，不在分布图上标实心点。与推定不同：推定是已经有码，只是依据为二手来源。</p>
+<h3>四、热力图怎么看</h3>
+<p>颜色表示判断，不是阶段。名次与判断均来自矩阵：第 1–2 名「''' + judgment_badge('值得看') + '''」，第 3–5 名「''' + judgment_badge('观察') + '''」，第 6–7 名「''' + judgment_badge('不看') + '''」（指不整体押注，细分环节仍可挑）。格内写原始名次。</p>
+<h3>五、名次坡度图怎么看</h3>
+<p>七条赛道均由矩阵里的原始「第 N」画出；越靠上名次越前。线条只表示名次随时间维度的变化，不表示阶段码。</p>
+</details></div>'''
+
+
+def track_guide_link(rendered):
+    def add(match):
+        paragraph = match[0]
+        if 'href="index.html#code-guide"' in paragraph:
+            return paragraph
+        return paragraph[:-4] + ' <a href="index.html#code-guide">编码说明</a></p>'
+    return re.sub(r'<p><strong>类别与阶段.*?</p>', add, rendered, count=1, flags=re.S)
+
+
 def matrix_html(m):
     rows = []
     for t in m['tracks']:
@@ -142,7 +200,7 @@ def matrix_html(m):
             cells.append(f'<td>{judgment_badge(c[0])}<span class="line">{esc(c[1])}</span></td>' if c else '<td class="invalid">数据异常</td>')
         rows.append(f'<tr><th scope="row"><a href="{esc(t["slug"])}.html">{esc(t["name"])}</a></th><td class="stage-cell">{stage}</td>{"".join(cells)}</tr>')
     head = ''.join(f'<th scope="col">{esc(h)}</th>' for h in m['horizons'])
-    table = f'<table class="matrix"><caption>七条赛道 × 四个时间维度 · 原始判断</caption><thead><tr><th scope="col">赛道</th><th scope="col">类别 · 当前阶段</th>{head}</tr></thead><tbody>{"".join(rows)}</tbody></table>'
+    table = f'<table class="matrix"><caption>七条赛道 × 四个时间维度 · 原始判断</caption><thead><tr><th scope="col">赛道</th><th scope="col">类别 · 当前阶段 <a href="#code-guide">编码说明</a></th>{head}</tr></thead><tbody>{"".join(rows)}</tbody></table>'
     return '<h2>七条赛道 × 四个时间维度</h2>' + scroll(table) + f'<p class="note">{esc(m.get("rule", ""))}</p>'
 
 
@@ -196,7 +254,7 @@ def stage_chart(m):
     parts = [svg_open(980, height, '类别与阶段码分布图，所有码均为推定；区间保留两个端点', 'stage-distribution')]
     for i, c in enumerate(CODES):
         x = axis_start + tick_gap*i
-        parts.append(f'<line class="grid" x1="{x}" y1="42" x2="{x}" y2="{height-12}" fill="none" stroke="#dce3ec" stroke-width="1" stroke-dasharray="3 5"/>' + txt(x, 25, c, 'text-anchor="middle"'))
+        parts.append(f'<line class="grid" x1="{x}" y1="42" x2="{x}" y2="{height-12}" fill="none" stroke="#dce3ec" stroke-width="1" stroke-dasharray="3 5"/>' + txt(x, 25, c, 'text-anchor="middle"', title=stage_meaning(c)))
     for i, (owner, s, extra, codes) in enumerate(plotted):
         y = 80 + 76*i
         cat = s.get('category', '')
@@ -204,7 +262,10 @@ def stage_chart(m):
         color = CATEGORY_COLORS[cls]
         detail = f'{owner} · {s.get("name", "未录入")} / {cat} / {s["code"]} / 推定'
         note = s.get('note', '')
-        parts.append(f'<g class="segment {cls}{" extra" if extra else ""}" data-code="{esc(s["code"])}" data-owner="{esc(owner)}"><title>{esc(detail + (" / " + note if note else ""))}</title>')
+        definitions = '；'.join(stage_meaning(c, cat if cat in CATEGORIES else None) for c in codes)
+        if cat not in CATEGORIES:
+            definitions = '按三问分别归类后参照：' + definitions
+        parts.append(f'<g class="segment {cls}{" extra" if extra else ""}" data-code="{esc(s["code"])}" data-owner="{esc(owner)}"><title>{esc(detail + (" / " + note if note else "") + " / " + definitions)}</title>')
         parts.append(txt(14, y-10, f'{owner} · {s.get("name", "未录入")}', 'class="segment-name"'))
         parts.append(txt(14, y+12, f'{cat} · {s["code"]}（推定）', 'class="small"'))
         xs = [axis_start + tick_gap*CODES.index(c) for c in codes]
@@ -369,7 +430,7 @@ def build(root):
         meta, body = by_slug['index']
         if body.count('<!--MATRIX-->') != 1:
             raise BuildError('content/00-overview.md', 'MissingMatrixMarker')
-        visuals = matrix_html(m) + heatmap(m) + stage_chart(m) + bump_chart(m)
+        visuals = matrix_html(m) + code_guide() + heatmap(m) + stage_chart(m) + bump_chart(m)
         rendered = md(body)
         rendered = rendered.replace('<p><!--MATRIX--></p>', visuals).replace('<!--MATRIX-->', visuals)
         (nxt/'index.html').write_text(page('总览', rendered, '总览', meta['updated'], tracks, updated), encoding='utf-8')
@@ -377,7 +438,7 @@ def build(root):
         for meta, body in tracks:
             main, log = split_changelog(body)
             entries.extend(log_entries(log, meta['title']))
-            rendered = md(main) + '<h2>变更记录</h2>' + md(log)
+            rendered = track_guide_link(md(main)) + '<h2>变更记录</h2>' + md(log)
             (nxt/(meta['slug']+'.html')).write_text(page(meta['title'], rendered, meta['title'], meta['updated'], tracks, updated), encoding='utf-8')
         entries.sort(key=lambda row: row[0], reverse=True)
         full_log = '<h2>完整变更列表</h2><ul class="change-list">' + ''.join(f'<li><time datetime="{esc(d)}">{esc(d)}</time> <strong>{esc(t)}</strong>｜{esc(s)}</li>' for d,t,s in entries) + '</ul>'

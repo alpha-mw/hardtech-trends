@@ -6,9 +6,17 @@
 @media(max-width:640px){.header-inner{padding:12px 14px 8px}.brand{font-size:14px;letter-spacing:0}.topbar{gap:8px}button{font-size:11px;padding:4px 7px}nav{gap:2px;margin-top:7px}nav a{padding:4px 9px}main{padding:20px 12px 8px}h1{font-size:28px}h2{font-size:19px}.page-heading{padding:3px 5px 20px}.card{padding:20px 16px;border-radius:12px;margin-bottom:16px}body{font-size:15px}.card ul{padding-left:20px}footer{padding:22px 18px 30px}table{min-width:580px}.legend{gap:7px}}
 @media print{header,button,.skip,.scroll-hint{display:none}body{background:var(--surface)}main{max-width:none;padding:0}.card{box-shadow:none;break-inside:avoid;padding:12px}.tablewrap{overflow:visible}.chart{min-width:0;width:100%}a{color:inherit}}
 
+#code-guide details{margin-top:0;font-size:14px}
+#code-guide summary{font-size:16px;font-weight:650;padding:4px 0 12px}
+#code-guide .code-table{min-width:850px}
+#code-guide .code-table td:nth-child(n+3){min-width:14em}
+#code-guide .code-table th:nth-child(2), #code-guide .code-table td:nth-child(2){white-space:nowrap}
+#code-guide h3{margin-top:24px}
+
 /* Light chart colors live in SVG attributes and badge inline styles.
    Important overrides below are limited to inline HTML badge colors. */
 @media(prefers-color-scheme:dark){
+:root:not([data-theme="light"]) #code-guide{color:#e2e9f4}
 :root:not([data-theme="light"]) .chart text{fill:#e2e9f4}
 :root:not([data-theme="light"]) .chart .grid, :root:not([data-theme="light"]) .timeline-line{stroke:#354458}
 :root:not([data-theme="light"]) .bump-track polyline{fill:none;stroke:#a5b5ca}
@@ -41,6 +49,7 @@
 :root:not([data-theme="light"]) .segment.neutral .range{fill:none;stroke:#bec8d7}
 :root:not([data-theme="light"]) .segment.neutral .neutral-point, :root:not([data-theme="light"]) .segment.domestic .extra-point, :root:not([data-theme="light"]) .segment.sovereign .extra-point, :root:not([data-theme="light"]) .segment.future .extra-point, :root:not([data-theme="light"]) .segment.neutral .extra-point, :root:not([data-theme="light"]) .category.neutral .category-marker path{fill:#192332}
 }
+:root[data-theme="dark"] #code-guide{color:#e2e9f4}
 :root[data-theme="dark"] .chart text{fill:#e2e9f4}
 :root[data-theme="dark"] .chart .grid, :root[data-theme="dark"] .timeline-line{stroke:#354458}
 :root[data-theme="dark"] .bump-track polyline{fill:none;stroke:#a5b5ca}

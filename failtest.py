@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Exercise disposable copies and preserve the successful local preview."""
+import ast
 import contextlib
 import hashlib
 import io
 import json
 import pathlib
 import re
+import runpy
 import shutil
 import subprocess
 import sys
@@ -194,7 +196,7 @@ def check_output():
     require(len(pages) == 9)
     for p in pages:
         s=p.read_text()
-        require('href="style.css?v=20261112-svg1"' in s)
+        require(re.findall(r'<link rel="stylesheet" href="([^"]+)"', s) == ['style.css?v=20261112-legend1'])
         require('<meta name="robots" content="noindex,nofollow">' in s)
         require('阶段码为产业结构研究口径，非投资建议，不反映任何持仓。' in s)
         require(not re.search(r'<script[^>]*\bsrc=',s))
@@ -251,6 +253,93 @@ def check_output():
     require(len(timeline.findall('s:g',ns))==expected_logs)
     require(len(re.findall('<time datetime=',log))==expected_logs)
     return '9 页 noindex、robots、页脚与四图通过；22 个定码细分含 6 个双端点区间；时间轴条目与原始记录逐数一致'
+
+
+def check_code_guide():
+    import html
+    forbidden_stage_name = '\u7acb\u9879'
+    source = (ROOT/'build.py').read_text()
+    tree = ast.parse(source)
+    definition_nodes = [node for node in tree.body if isinstance(node, ast.Assign)
+                        and any(isinstance(target, ast.Name) and target.id == 'STAGE_DEFINITIONS'
+                                for target in node.targets)]
+    meaning_nodes = [node for node in tree.body if isinstance(node, ast.FunctionDef)
+                     and node.name in ('stage_meaning', 'code_guide')]
+    require(len(definition_nodes) == 1 and {node.name for node in meaning_nodes} == {'stage_meaning', 'code_guide'})
+    for node in definition_nodes + meaning_nodes:
+        require(forbidden_stage_name not in ast.get_source_segment(source, node))
+        require(all(forbidden_stage_name not in child.value for child in ast.walk(node)
+                    if isinstance(child, ast.Constant) and isinstance(child.value, str)))
+    build = runpy.run_path(str(ROOT/'build.py'))
+    require(forbidden_stage_name not in json.dumps(build['STAGE_DEFINITIONS'], ensure_ascii=False))
+    require(forbidden_stage_name not in html.unescape(build['code_guide']()))
+    for code in build['CODES']:
+        for category in (None, *build['CATEGORIES']):
+            require(forbidden_stage_name not in build['stage_meaning'](code, category))
+    page = (ROOT/'docs/index.html').read_text()
+    guide = re.search(r'<section class="card"><h2>编码说明</h2>(.*?)</section>', page, re.S)[1]
+    require(forbidden_stage_name not in html.unescape(guide))
+    require(guide.count('id="code-guide"') == page.count('id="code-guide"') == 1)
+    require(re.search(r'<details\b[^>]*\bopen(?:\s|>)', guide))
+    require('<summary>怎么读类别、阶段码和颜色</summary>' in guide)
+    visible = html.unescape(re.sub(r'<[^>]+>', '', guide))
+    normalized = re.sub(r'\s+', '', visible)
+    for phrase in ('三类共用同一套阶段码', '按顺序，命中即停', '落档依据只有二手来源',
+                   '还没有给出阶段码', '颜色表示判断，不是阶段', '线条只表示名次随时间维度的变化'):
+        require(phrase in normalized)
+    require(page.index('class="matrix"') < page.index('<h2>编码说明</h2>') < page.index('<h2>01 / 相对吸引力热力图</h2>'))
+    require('<a href="#code-guide">编码说明</a>' in re.search(r'<table class="matrix">.*?</table>', page, re.S)[0])
+    table = ET.fromstring(re.search(r'<table class="code-table">.*?</table>', guide, re.S)[0])
+    rows = [list(row) for row in table.findall('./tbody/tr')]
+    codes = ['S0', 'S1a', 'S1b', 'S2', 'S3a', 'S3b']
+    require(len(rows) == 6 and all(len(row) == 5 for row in rows))
+    require([row[0].text for row in rows] == codes)
+    definitions = {row[0].text: [cell.text for cell in row[2:]] for row in rows}
+    chart = ET.fromstring(re.search(r'<svg[^>]*class="chart stage-distribution".*?</svg>', page, re.S)[0])
+    ns = {'s': 'http://www.w3.org/2000/svg'}
+    axes = chart.findall('s:text', ns)
+    require(len(axes) == 6)
+    for axis, code, level in zip(axes, codes, ('始局', '始局', '始局', '现局', '终局', '终局')):
+        title = axis.find('s:title', ns)
+        require(title is not None and title.tail == code and level in title.text and '区间' not in title.text)
+        require(forbidden_stage_name not in title.text)
+        require(all(definition in title.text for definition in definitions[code]))
+    m = json.loads((ROOT/'content/matrix.json').read_text())
+    segments = [(t['name'], s) for t in m['tracks'] for s in t['stage_segments']]
+    segments += [('赛道以外', s) for s in m['extra_segments']]
+    groups = chart.findall('s:g', ns)
+    require(len(groups) == 22 and all(g.get('data-code') for g in groups))
+    for group in groups:
+        name = group.find('s:text', ns).text
+        matches = [s for owner, s in segments if name == owner + ' · ' + s['name']]
+        require(len(matches) == 1)
+        segment = matches[0]
+        title = group.find('s:title', ns).text
+        require('推定' in title and segment['code'] == group.get('data-code'))
+        # Check only the added meanings, preserving original names and notes.
+        prefix = f'{name} / {segment["category"]} / {segment["code"]} / 推定'
+        if segment.get('note'):
+            prefix += ' / ' + segment['note']
+        prefix += ' / '
+        require(title.startswith(prefix))
+        require(forbidden_stage_name not in title[len(prefix):])
+        categories = ['国产替代', '自主可控', '未来产业']
+        indices = [categories.index(segment['category'])] if segment['category'] in categories else range(3)
+        for code in re.split('[–→]', segment['code']):
+            require(all(definitions[code][i] in title for i in indices))
+    for track in m['tracks']:
+        rendered = (ROOT/'docs'/(track['slug']+'.html')).read_text()
+        link = '<a href="index.html#code-guide">编码说明</a>'
+        require(rendered.count(link) == 1)
+        require(link in re.search(r'<p><strong>类别与阶段.*?</p>', rendered, re.S)[0])
+    require('href="index.html#code-guide"' not in (ROOT/'docs/changelog.html').read_text())
+    case = fresh('guide_repeat')
+    before = digest_tree(case/'docs')
+    require(execute(case).returncode == 0 and digest_tree(case/'docs') == before)
+    require(execute(case).returncode == 0 and digest_tree(case/'docs') == before)
+    (case/'guide_probe.py').write_text('import build\ns = \'<p><strong>类别与阶段（推定）：</strong> S1a</p>\'\na = build.track_guide_link(s)\nassert a == build.track_guide_link(a)\n')
+    require(execute(case, 'guide_probe.py').returncode == 0)
+    return '说明卡位置、展开与原句；七页锚点；六轴及 22 组定义；阶段短名检查仅限说明卡、定义源码和含义悬停；双端点与重复构建幂等均通过'
 
 
 def check_svg_colors():
@@ -357,11 +446,12 @@ def main():
     all_ok=True
     before_docs=digest_tree(ROOT/'docs')
     before_matrix=(ROOT/'content/matrix.json').read_bytes()
+    before_content=digest_tree(ROOT/'content')
     try:
         if WORK.exists():
             shutil.rmtree(WORK)
         WORK.mkdir()
-        checks=[('场景 1',check_matrix_failures),('场景 2',check_missing_stages),('场景 3',check_bad_cells),('原子性与回滚',check_atomicity),('产物抽查',check_output),('SVG 颜色与缓存',check_svg_colors)]
+        checks=[('场景 1',check_matrix_failures),('场景 2',check_missing_stages),('场景 3',check_bad_cells),('原子性与回滚',check_atomicity),('产物抽查',check_output),('编码说明与悬停',check_code_guide),('SVG 颜色与缓存',check_svg_colors)]
         for name,check in checks:
             try:
                 with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
@@ -373,7 +463,8 @@ def main():
     finally:
         if WORK.exists():
             shutil.rmtree(WORK)
-    preserved=(before_docs==digest_tree(ROOT/'docs') and before_matrix==(ROOT/'content/matrix.json').read_bytes())
+    preserved=(before_docs==digest_tree(ROOT/'docs') and before_matrix==(ROOT/'content/matrix.json').read_bytes()
+               and before_content==digest_tree(ROOT/'content'))
     all_ok=all_ok and preserved
     print('隔离与清理: '+('PASS' if preserved and not WORK.exists() else 'FAIL')+' — docs/ 与 content/matrix.json 未改动；_failtest_work/ 已清理')
     return 0 if all_ok else 1
