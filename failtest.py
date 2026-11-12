@@ -16,6 +16,7 @@ from html.parser import HTMLParser
 
 ROOT = pathlib.Path(__file__).resolve().parent
 WORK = ROOT / '_failtest_work'
+OLD_STAGE_TERMS = ('\u59cb\u5c40', '\u73b0\u5c40')
 
 
 def digest_tree(path):
@@ -196,7 +197,8 @@ def check_output():
     require(len(pages) == 9)
     for p in pages:
         s=p.read_text()
-        require(re.findall(r'<link rel="stylesheet" href="([^"]+)"', s) == ['style.css?v=20261112-legend1'])
+        require(all(word not in s for word in OLD_STAGE_TERMS))
+        require(re.findall(r'<link rel="stylesheet" href="([^"]+)"', s) == ['style.css?v=20261112-rename1'])
         require('<meta name="robots" content="noindex,nofollow">' in s)
         require('阶段码为产业结构研究口径，非投资建议，不反映任何持仓。' in s)
         require(not re.search(r'<script[^>]*\bsrc=',s))
@@ -271,6 +273,10 @@ def check_code_guide():
         require(all(forbidden_stage_name not in child.value for child in ast.walk(node)
                     if isinstance(child, ast.Constant) and isinstance(child.value, str)))
     build = runpy.run_path(str(ROOT/'build.py'))
+    require([level for level, _ in build['STAGE_DEFINITIONS'].values()]
+            == ['开局前', '开局', '开局', '中局', '终局', '终局'])
+    require(all(word not in json.dumps(build['STAGE_DEFINITIONS'], ensure_ascii=False)
+                and word not in html.unescape(build['code_guide']()) for word in OLD_STAGE_TERMS))
     require(forbidden_stage_name not in json.dumps(build['STAGE_DEFINITIONS'], ensure_ascii=False))
     require(forbidden_stage_name not in html.unescape(build['code_guide']()))
     for code in build['CODES']:
@@ -294,12 +300,13 @@ def check_code_guide():
     codes = ['S0', 'S1a', 'S1b', 'S2', 'S3a', 'S3b']
     require(len(rows) == 6 and all(len(row) == 5 for row in rows))
     require([row[0].text for row in rows] == codes)
+    require([row[1].text for row in rows] == ['开局前', '开局', '开局', '中局', '终局', '终局'])
     definitions = {row[0].text: [cell.text for cell in row[2:]] for row in rows}
     chart = ET.fromstring(re.search(r'<svg[^>]*class="chart stage-distribution".*?</svg>', page, re.S)[0])
     ns = {'s': 'http://www.w3.org/2000/svg'}
     axes = chart.findall('s:text', ns)
     require(len(axes) == 6)
-    for axis, code, level in zip(axes, codes, ('始局', '始局', '始局', '现局', '终局', '终局')):
+    for axis, code, level in zip(axes, codes, ('开局前', '开局', '开局', '中局', '终局', '终局')):
         title = axis.find('s:title', ns)
         require(title is not None and title.tail == code and level in title.text and '区间' not in title.text)
         require(forbidden_stage_name not in title.text)
@@ -340,6 +347,26 @@ def check_code_guide():
     (case/'guide_probe.py').write_text('import build\ns = \'<p><strong>类别与阶段（推定）：</strong> S1a</p>\'\na = build.track_guide_link(s)\nassert a == build.track_guide_link(a)\n')
     require(execute(case, 'guide_probe.py').returncode == 0)
     return '说明卡位置、展开与原句；七页锚点；六轴及 22 组定义；阶段短名检查仅限说明卡、定义源码和含义悬停；双端点与重复构建幂等均通过'
+
+
+def check_public_stage_terms():
+    build = runpy.run_path(str(ROOT/'build.py'))
+    original = f'{OLD_STAGE_TERMS[0]}前 / {OLD_STAGE_TERMS[0]} / {OLD_STAGE_TERMS[1]} / 终局'
+    expected = '开局前 / 开局 / 中局 / 终局'
+    mapped = build['public_stage_terms'](original)
+    require(mapped == expected and build['public_stage_terms'](mapped) == mapped)
+    case = fresh('public_stage_terms')
+    for name in ('00-overview.md', '01-semiconductor.md', '90-changelog-overview.md'):
+        path = case/'content'/name
+        path.write_text(path.read_text() + f'\n\n{original}\n\n- 2026-11-12 {original}\n', encoding='utf-8')
+    before_content = digest_tree(case/'content')
+    require(execute(case).returncode == 0)
+    require(digest_tree(case/'content') == before_content)
+    for path in (case/'docs').glob('*.html'):
+        require(all(word not in path.read_text() for word in OLD_STAGE_TERMS))
+    for name in ('index.html', 'semiconductor.html', 'changelog.html'):
+        require(expected in (case/'docs'/name).read_text())
+    return '旧术语正文与变更记录仅在产物中映射；九页无旧词，源文不变，映射幂等'
 
 
 def check_svg_colors():
@@ -451,7 +478,7 @@ def main():
         if WORK.exists():
             shutil.rmtree(WORK)
         WORK.mkdir()
-        checks=[('场景 1',check_matrix_failures),('场景 2',check_missing_stages),('场景 3',check_bad_cells),('原子性与回滚',check_atomicity),('产物抽查',check_output),('编码说明与悬停',check_code_guide),('SVG 颜色与缓存',check_svg_colors)]
+        checks=[('场景 1',check_matrix_failures),('场景 2',check_missing_stages),('场景 3',check_bad_cells),('原子性与回滚',check_atomicity),('产物抽查',check_output),('编码说明与悬停',check_code_guide),('公开术语映射',check_public_stage_terms),('SVG 颜色与缓存',check_svg_colors)]
         for name,check in checks:
             try:
                 with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):

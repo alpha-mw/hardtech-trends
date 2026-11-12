@@ -18,12 +18,12 @@ STAGE_LEGEND = '展示码主码后的括号表示该赛道细分码的跨度，�
 CATEGORIES = {'国产替代': 'domestic', '自主可控': 'sovereign', '未来产业': 'future'}
 LABELS = {'值得看': 'go', '观察': 'watch', '不看': 'no'}
 CODES = ['S0', 'S1a', 'S1b', 'S2', 'S3a', 'S3b']
-CSS_VERSION = '20261112-legend1'
+CSS_VERSION = '20261112-rename1'
 STAGE_DEFINITIONS = {
-    'S0': ('始局前', ('萌芽：国产处于研发或样品，无量产订单', '有需求、无能力，依赖进口或空白', '科学验证：路线未收敛，在实验室或论文')),
-    'S1a': ('始局', ('替代导入：首批认证或小批量，靠安全诉求而非性价比', '从无到有：首次实现（首飞成功、首颗入轨、型号定型）', '工程验证：首个工程节点')),
-    'S1b': ('始局', ('替代放量：国内份额快速上升，仍以内需为主', '成体系：批量交付、组网、多家供给', '早期商业化：订单可重复')),
-    'S2': ('现局', ('国产优化：成本、良率 / 性能追平龙头', '降本商业化：单位成本向国际一线收敛，商业客户成为主力', '并跑领跑：中国头部达到全球前列')),
+    'S0': ('开局前', ('萌芽：国产处于研发或样品，无量产订单', '有需求、无能力，依赖进口或空白', '科学验证：路线未收敛，在实验室或论文')),
+    'S1a': ('开局', ('替代导入：首批认证或小批量，靠安全诉求而非性价比', '从无到有：首次实现（首飞成功、首颗入轨、型号定型）', '工程验证：首个工程节点')),
+    'S1b': ('开局', ('替代放量：国内份额快速上升，仍以内需为主', '成体系：批量交付、组网、多家供给', '早期商业化：订单可重复')),
+    'S2': ('中局', ('国产优化：成本、良率 / 性能追平龙头', '降本商业化：单位成本向国际一线收敛，商业客户成为主力', '并跑领跑：中国头部达到全球前列')),
     'S3a': ('终局', ('全球输出：借产业链与成本优势出口', '对外提供：为海外客户提供发射、卫星或服务', '标准与生态输出：掌握话语权')),
     'S3b': ('终局', ('内卷出清：增量见顶，价格战、过剩', '成熟出清：发射价格战、产能过剩、民营整合', '商品化：成本曲线变平，价格战、出清')),
 }
@@ -39,6 +39,10 @@ class BuildError(Exception):
 
 def esc(value):
     return html.escape(str(value), quote=True)
+
+
+def public_stage_terms(text):
+    return text.replace('\u59cb\u5c40', '开局').replace('\u73b0\u5c40', '中局')
 
 
 def remove(path):
@@ -157,7 +161,7 @@ def code_guide():
                    for code, (level, definitions) in STAGE_DEFINITIONS.items())
     table = '<table class="code-table"><thead><tr><th scope="col">码</th><th scope="col">层次</th>' + headers + '</tr></thead><tbody>' + rows + '</tbody></table>'
     return '''<h2>编码说明</h2><div id="code-guide"><details open><summary>怎么读类别、阶段码和颜色</summary>
-<p>本页用两套公开口径：赛道类别（① 国产替代、② 自主可控、③ 未来产业）和细分阶段码 S0–S3b（始局 / 现局 / 终局）。三类共用同一套阶段码，各自定义始局、现局、终局。阶段码为产业结构研究口径，非投资建议，不反映任何持仓。按类别配色，不按阶段着色。</p>
+<p>本页用两套公开口径：赛道类别（① 国产替代、② 自主可控、③ 未来产业）和细分阶段码 S0–S3b（开局 / 中局 / 终局）。三类共用同一套阶段码，各自定义开局、中局、终局。阶段码为产业结构研究口径，非投资建议，不反映任何持仓。按类别配色，不按阶段着色。</p>
 <h3>一、三种类别，以及怎么按三问归类</h3>
 <p>① 国产替代。终局 = 国产在成本和技术上超越国际龙头，再借产业链优势出口（新能源车今天的位置）。</p>
 <p>② 自主可控。终局 = 体系自主可保障，成本降到国际一线可比后，对外提供产品和服务（国际发射、海外星座服务）。出口占比天然低于国产替代，S3a 的门槛相应降低。</p>
@@ -169,7 +173,7 @@ def code_guide():
 <li>有成熟方案，主要由市场客户按性价比和认证采购，国产靠成本、性能和供应安全逐步替代 → ① 国产替代。海外方案因管制对中国不可得，但买方仍是市场客户的，归国产替代，不归自主可控。</li>
 </ol>
 <p>归类按细分拆，不按公司拆，也不按大行业拆。混合赛道按类别分开展示，不合并成一个码。</p>
-<h3>二、阶段码 S0–S3b（始局 / 现局 / 终局）</h3>
+<h3>二、阶段码 S0–S3b（开局 / 中局 / 终局）</h3>
 <p>同一套码，三类的名称和一句话定义不同。展示码主码后的括号表示该赛道细分码的跨度，不是单一精确读数；各细分的推定码见分布图。</p>
 ''' + scroll(table) + '''
 <h3>三、「推定」和「尚未定码」</h3>
@@ -347,6 +351,7 @@ def card_sections(body):
 
 
 def page(title, body, active, page_updated, tracks, updated):
+    body = public_stage_terms(body)
     items = [('index.html', '总览')] + [(m['slug']+'.html', m['title']) for m,_ in tracks] + [('changelog.html','变更记录')]
     nav = ''.join(f'<a href="{esc(h)}"' + (' class="on" aria-current="page"' if t==active else '') + f'>{esc(t)}</a>' for h,t in items)
     built = datetime.date.today().isoformat()
@@ -404,7 +409,7 @@ def build(root):
         m = load_matrix(root)
         import markdown
         def md(body):
-            rendered = markdown.markdown(body, extensions=['tables'])
+            rendered = markdown.markdown(public_stage_terms(body), extensions=['tables'])
             def table(match):
                 def cell(match):
                     tag, attrs, text = match.groups()
