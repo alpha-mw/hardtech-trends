@@ -18,6 +18,10 @@ STAGE_LEGEND = '展示码主码后的括号表示该赛道细分码的跨度，�
 CATEGORIES = {'国产替代': 'domestic', '自主可控': 'sovereign', '未来产业': 'future'}
 LABELS = {'值得看': 'go', '观察': 'watch', '不看': 'no'}
 CODES = ['S0', 'S1a', 'S1b', 'S2', 'S3a', 'S3b']
+CSS_VERSION = '20261112-svg1'
+CATEGORY_COLORS = {'domestic': '#245fc4', 'sovereign': '#087d73', 'future': '#7846ba', 'neutral': '#606a7c'}
+JUDGMENT_COLORS = {'go': ('#8c4b12', '#fff0ce'), 'watch': ('#685913', '#f5f1d9'),
+                   'no': ('#606974', '#e9edf2'), 'invalid': ('#606974', '#e9edf2')}
 
 
 class BuildError(Exception):
@@ -105,15 +109,28 @@ def scroll(body):
 
 
 def svg_open(width, height, label, marker):
-    return f'<svg xmlns="http://www.w3.org/2000/svg" class="chart {marker}" viewBox="0 0 {width} {height}" role="img" aria-label="{esc(label)}"><title>{esc(label)}</title>'
+    return f'<svg xmlns="http://www.w3.org/2000/svg" class="chart {marker}" viewBox="0 0 {width} {height}" width="{width}" height="{height}" role="img" aria-label="{esc(label)}"><title>{esc(label)}</title>'
 
 
-def txt(x, y, value, extra=''):
-    return f'<text x="{x}" y="{y}" {extra}>{esc(value)}</text>'
+def txt(x, y, value, extra='', fill='#202d40'):
+    return f'<text x="{x}" y="{y}" fill="{fill}" {extra}>{esc(value)}</text>'
 
 
 def category_badges(categories):
-    return ''.join(f'<span class="category {CATEGORIES.get(c, "neutral")}"><i aria-hidden="true"></i>{esc(c)}</span>' for c in categories)
+    badges = []
+    for c in categories:
+        cls = CATEGORIES.get(c, 'neutral')
+        color = CATEGORY_COLORS[cls]
+        shape = (f'<path d="M 6 1 L 11 6 6 11 1 6 Z" fill="#fff" stroke="{color}" stroke-width="2"/>'
+                 if cls == 'neutral' else f'<circle cx="6" cy="6" r="4" fill="{color}" stroke="{color}" stroke-width="1"/>')
+        badges.append(f'<span class="category {cls}" style="display:inline-flex;align-items:center;gap:6px;margin:3px 14px 3px 0;color:{color};white-space:nowrap"><svg xmlns="http://www.w3.org/2000/svg" class="category-marker" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">{shape}</svg>{esc(c)}</span>')
+    return ''.join(badges)
+
+
+def judgment_badge(label):
+    cls = LABELS[label]
+    fg, bg = JUDGMENT_COLORS[cls]
+    return f'<span class="tag {cls}" style="display:inline-block;margin-right:10px;padding:2px 7px;border-radius:5px;color:{fg};background:{bg}">{esc(label)}</span>'
 
 
 def matrix_html(m):
@@ -122,7 +139,7 @@ def matrix_html(m):
         stage = (category_badges(t['category']) + f'<span class="line">{esc(t["stage_display"])}<br><small>推定</small></span>') if has_stage(t) else '未录入'
         cells = []
         for c in cells_for(t, len(m['horizons'])):
-            cells.append(f'<td><span class="tag {LABELS[c[0]]}">{esc(c[0])}</span><span class="line">{esc(c[1])}</span></td>' if c else '<td class="invalid">数据异常</td>')
+            cells.append(f'<td>{judgment_badge(c[0])}<span class="line">{esc(c[1])}</span></td>' if c else '<td class="invalid">数据异常</td>')
         rows.append(f'<tr><th scope="row"><a href="{esc(t["slug"])}.html">{esc(t["name"])}</a></th><td class="stage-cell">{stage}</td>{"".join(cells)}</tr>')
     head = ''.join(f'<th scope="col">{esc(h)}</th>' for h in m['horizons'])
     table = f'<table class="matrix"><caption>七条赛道 × 四个时间维度 · 原始判断</caption><thead><tr><th scope="col">赛道</th><th scope="col">类别 · 当前阶段</th>{head}</tr></thead><tbody>{"".join(rows)}</tbody></table>'
@@ -141,18 +158,19 @@ def heatmap(m):
         for j, c in enumerate(cells_for(t, len(hs))):
             x = 166 + j * 190
             cls = LABELS[c[0]] if c else 'invalid'
+            fg, bg = JUDGMENT_COLORS[cls]
             n = rank(c, len(ts))
             label = f'第 {n}' if n else ('名次未录入' if c else '数据异常')
             detail = f'{t["name"]} · {hs[j]} · {c[0]} · {c[1]}' if c else f'{t["name"]} · {hs[j]} · 数据异常'
-            parts.append(f'<g class="heat {cls}"><title>{esc(detail)}</title><rect x="{x}" y="{y}" width="178" height="54" rx="10"/>' + txt(x+89, y+24, label, 'text-anchor="middle" class="rank"') + txt(x+89, y+43, c[0] if c else '数据异常', 'text-anchor="middle" class="small"') + '</g>')
+            parts.append(f'<g class="heat {cls}"><title>{esc(detail)}</title><rect x="{x}" y="{y}" width="178" height="54" rx="10" fill="{bg}" stroke="{fg}" stroke-width="1" stroke-opacity=".32"/>' + txt(x+89, y+24, label, 'text-anchor="middle" class="rank"', fg) + txt(x+89, y+43, c[0] if c else '数据异常', 'text-anchor="middle" class="small"', fg) + '</g>')
     parts.append('</svg>')
-    legend = '<p class="legend">' + ' '.join(f'<span class="tag {c}">{l}</span>' for l,c in LABELS.items()) + ' 颜色表示判断；名次与判断均来自矩阵。</p>'
+    legend = '<p class="legend">' + ' '.join(judgment_badge(label) for label in LABELS) + ' 颜色表示判断；名次与判断均来自矩阵。</p>'
     return '<h2>01 / 相对吸引力热力图</h2>' + legend + scroll(''.join(parts))
 
 
 def stage_chart(m):
     heading = '<h2>02 / 类别 × 阶段码分布（推定）</h2>'
-    legend = '<div class="legend">' + category_badges(list(CATEGORIES)) + '<span class="category neutral"><b>◇</b> 按三问拆（中性空心菱形）</span></div>'
+    legend = '<div class="legend">' + category_badges(list(CATEGORIES) + ['按三问拆（中性空心菱形）']) + '</div>'
     legend += f'<p class="note">全部坐标码为推定。圆点表示精确码，短横与两端点表示区间或过渡；虚线空心框表示单列 / 观察细分，不是第八条赛道。按类别配色，不按阶段着色。</p><p class="note">{STAGE_LEGEND}{DISCLAIMER}</p>'
     missing = [t['name'] for t in m['tracks'] if not has_stage(t)]
     if len(missing) == len(m['tracks']):
@@ -178,11 +196,12 @@ def stage_chart(m):
     parts = [svg_open(980, height, '类别与阶段码分布图，所有码均为推定；区间保留两个端点', 'stage-distribution')]
     for i, c in enumerate(CODES):
         x = axis_start + tick_gap*i
-        parts.append(f'<line class="grid" x1="{x}" y1="42" x2="{x}" y2="{height-12}"/>' + txt(x, 25, c, 'text-anchor="middle"'))
+        parts.append(f'<line class="grid" x1="{x}" y1="42" x2="{x}" y2="{height-12}" fill="none" stroke="#dce3ec" stroke-width="1" stroke-dasharray="3 5"/>' + txt(x, 25, c, 'text-anchor="middle"'))
     for i, (owner, s, extra, codes) in enumerate(plotted):
         y = 80 + 76*i
         cat = s.get('category', '')
         cls = CATEGORIES.get(cat, 'neutral')
+        color = CATEGORY_COLORS[cls]
         detail = f'{owner} · {s.get("name", "未录入")} / {cat} / {s["code"]} / 推定'
         note = s.get('note', '')
         parts.append(f'<g class="segment {cls}{" extra" if extra else ""}" data-code="{esc(s["code"])}" data-owner="{esc(owner)}"><title>{esc(detail + (" / " + note if note else ""))}</title>')
@@ -190,14 +209,14 @@ def stage_chart(m):
         parts.append(txt(14, y+12, f'{cat} · {s["code"]}（推定）', 'class="small"'))
         xs = [axis_start + tick_gap*CODES.index(c) for c in codes]
         if len(xs) == 2:
-            parts.append(f'<line class="range" x1="{xs[0]}" y1="{y}" x2="{xs[1]}" y2="{y}"/>')
+            parts.append(f'<line class="range" x1="{xs[0]}" y1="{y}" x2="{xs[1]}" y2="{y}" fill="none" stroke="{color}" stroke-width="4" stroke-linecap="round"/>')
         for x in xs:
             if extra:
-                parts.append(f'<rect class="point extra-point" x="{x-8}" y="{y-8}" width="16" height="16" rx="3"/>')
+                parts.append(f'<rect class="point extra-point" x="{x-8}" y="{y-8}" width="16" height="16" rx="3" fill="#fff" stroke="{color}" stroke-width="2.5" stroke-dasharray="4 2"/>')
             elif cls == 'neutral':
-                parts.append(f'<path class="point neutral-point" d="M {x} {y-9} l 9 9 -9 9 -9 -9 Z"/>')
+                parts.append(f'<path class="point neutral-point" d="M {x} {y-9} l 9 9 -9 9 -9 -9 Z" fill="#fff" stroke="{color}" stroke-width="2.5"/>')
             else:
-                parts.append(f'<circle class="point" cx="{x}" cy="{y}" r="6"/>')
+                parts.append(f'<circle class="point" cx="{x}" cy="{y}" r="6" fill="{color}" stroke="{color}" stroke-width="2"/>')
         parts.append('</g>')
     parts.append('</svg>')
     undated = '<h3>尚未定码 / 观察细分</h3><ul class="pending">' + ''.join(f'<li>{esc(owner)} · {esc(s.get("name", "未录入"))} · {esc(s.get("category", "未录入"))} · {esc(s.get("code") or "未定码")}（{esc(s.get("evidence", "未录入"))}）{(" · " + esc(s["note"])) if s.get("note") else ""}</li>' for owner,s in pending) + '</ul>'
@@ -215,7 +234,7 @@ def bump_chart(m):
     width, height = xs[-1] + 180, 110 + 52*len(ts)
     parts = [svg_open(width, height, '名次坡度图：名次来自矩阵的第 N；越靠上名次越前', 'bump-chart')]
     for x, h in zip(xs, hs):
-        parts.append(txt(x, 28, h, 'text-anchor="middle"') + f'<line class="grid" x1="{x}" y1="50" x2="{x}" y2="{height-38}"/>')
+        parts.append(txt(x, 28, h, 'text-anchor="middle"') + f'<line class="grid" x1="{x}" y1="50" x2="{x}" y2="{height-38}" fill="none" stroke="#dce3ec" stroke-width="1" stroke-dasharray="3 5"/>')
     omitted = []
     patterns = ['', '10 3', '3 3', '12 3 2 3', '7 5', '2 5', '15 4']
     for i, t in enumerate(ts):
@@ -224,11 +243,11 @@ def bump_chart(m):
             omitted.append(t['name']); continue
         ys = [70 + 52*(n-1) for n in ranks]
         points = ' '.join(f'{x},{y}' for x,y in zip(xs,ys))
-        parts.append(f'<g class="bump-track" data-track="{esc(t["slug"])}" tabindex="0"><title>{esc(t["name"])}：{esc(" → ".join(str(n) for n in ranks))}</title><polyline points="{points}" stroke-dasharray="{patterns[i % len(patterns)]}"/>')
+        parts.append(f'<g class="bump-track" data-track="{esc(t["slug"])}" tabindex="0"><title>{esc(t["name"])}：{esc(" → ".join(str(n) for n in ranks))}</title><polyline points="{points}" fill="none" stroke="#5d6b7d" stroke-width="2" opacity=".65" stroke-dasharray="{patterns[i % len(patterns)]}"/>')
         parts.append(txt(xs[0]-20, ys[0]+5, t['name'], 'text-anchor="end"'))
         parts.append(txt(xs[-1]+20, ys[-1]+5, t['name']))
         for x,y,n in zip(xs,ys,ranks):
-            parts.append(f'<circle cx="{x}" cy="{y}" r="14"/>' + txt(x, y+5, n, 'text-anchor="middle"'))
+            parts.append(f'<circle cx="{x}" cy="{y}" r="14" fill="#fff" stroke="#5d6b7d" stroke-width="1.5"/>' + txt(x, y+5, n, 'text-anchor="middle"'))
         parts.append('</g>')
     parts.append('</svg>')
     note = '未进入坡度图：' + '、'.join(omitted) + '（单元格数据异常或「第 N」解析失败；不补排名）。' if omitted else '七条赛道均由原始「第 N」解析；越靠上名次越前，线条不表示阶段码。'
@@ -246,10 +265,10 @@ def log_entries(body, title):
 
 def timeline(entries):
     parts = [svg_open(1040, 42 + len(entries)*94, '变更记录时间轴，日期和摘要均摘自原有变更条目；完整记录见下方列表', 'changelog-timeline')]
-    parts.append(f'<line class="timeline-line" x1="150" y1="24" x2="150" y2="{max(24, len(entries)*94)}"/>')
+    parts.append(f'<line class="timeline-line" x1="150" y1="24" x2="150" y2="{max(24, len(entries)*94)}" fill="none" stroke="#dce3ec" stroke-width="2"/>')
     for i,(date,title,summary) in enumerate(entries):
         y = 35+i*94
-        parts.append(f'<g><title>{esc(date + " · " + title + " · " + summary)}</title><circle class="timeline-dot" cx="150" cy="{y}" r="6"/>' + txt(130,y+5,date,'text-anchor="end" class="small"') + txt(172,y+5,title,'class="timeline-title"'))
+        parts.append(f'<g><title>{esc(date + " · " + title + " · " + summary)}</title><circle class="timeline-dot" cx="150" cy="{y}" r="6" fill="#285cb8" stroke="#fff" stroke-width="3"/>' + txt(130,y+5,date,'text-anchor="end" class="small"') + txt(172,y+5,title,'class="timeline-title"'))
         excerpt = summary[:102] + ('…' if len(summary)>102 else '')
         for j,line in enumerate(textwrap.wrap(excerpt, width=52)):
             parts.append(txt(172,y+29+19*j,line,'class="small"'))
@@ -275,7 +294,7 @@ def page(title, body, active, page_updated, tracks, updated):
 <meta name="robots" content="noindex,nofollow">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<title>{esc(title)}｜{SITE_TITLE}</title>{THEME_INIT}<link rel="stylesheet" href="style.css"></head>
+<title>{esc(title)}｜{SITE_TITLE}</title>{THEME_INIT}<link rel="stylesheet" href="style.css?v={CSS_VERSION}"></head>
 <body><a class="skip" href="#main">跳至正文</a><header><div class="header-inner"><div class="topbar"><a class="brand" href="index.html">{SITE_TITLE}</a><button id="theme-toggle" type="button" aria-label="切换浅色、深色或跟随系统主题">主题：跟随系统</button></div><nav aria-label="主导航">{nav}</nav></div></header>
 <main id="main"><div class="page-heading"><p class="eyebrow">产业结构研究 / 七条赛道</p><h1>{esc(title)}</h1><p class="meta">本页更新：{esc(page_updated)} · 四个时间维度</p></div>{card_sections(body)}</main>
 <footer>研究用途，非投资建议；不构成任何证券的买卖推荐。内容均来自公开资料与经脱敏的行业判断。<br>{DISCLAIMER}<br>更新日期：{esc(page_updated)}（全站最近更新 {esc(updated)}，生成于 {built}）</footer>{THEME_BUTTON}</body></html>'''

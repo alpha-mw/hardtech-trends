@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
+from html.parser import HTMLParser
 
 ROOT = pathlib.Path(__file__).resolve().parent
 WORK = ROOT / '_failtest_work'
@@ -113,6 +114,13 @@ def check_bad_cells():
     for i,t in enumerate(m['tracks']):
         require((f'data-track="{t["slug"]}"' in page) == (i >= 4))
     require('未进入坡度图：半导体、商业航天、人形机器人、高端装备' in page)
+    invalid_cells = re.findall(r'<g class="heat invalid">.*?</g>', page, re.S)
+    require(len(invalid_cells) == 9)
+    for source in invalid_cells:
+        group = ET.fromstring(source)
+        rect = group.find('rect')
+        require(rect.get('fill') == '#e9edf2' and rect.get('stroke') == '#606974')
+        require(all(t.get('fill') == '#606974' for t in group.findall('text')))
     for t in m['tracks'][4:]:
         for c in t['cells']:
             import html
@@ -186,6 +194,7 @@ def check_output():
     require(len(pages) == 9)
     for p in pages:
         s=p.read_text()
+        require('href="style.css?v=20261112-svg1"' in s)
         require('<meta name="robots" content="noindex,nofollow">' in s)
         require('阶段码为产业结构研究口径，非投资建议，不反映任何持仓。' in s)
         require(not re.search(r'<script[^>]*\bsrc=',s))
@@ -196,6 +205,9 @@ def check_output():
     svgs={}
     for source in re.findall(r'<svg\b.*?</svg>', page, re.S):
         element=ET.fromstring(source)
+        if element.attrib.get('class') == 'category-marker':
+            require(element.attrib.get('aria-hidden') == 'true')
+            continue
         require(element.attrib.get('role')=='img' and element.attrib.get('aria-label'))
         svgs[element.attrib['class'].split()[-1]]=element
     require(set(svgs)=={'heatmap','stage-distribution','bump-chart'})
@@ -241,6 +253,106 @@ def check_output():
     return '9 页 noindex、robots、页脚与四图通过；22 个定码细分含 6 个双端点区间；时间轴条目与原始记录逐数一致'
 
 
+def check_svg_colors():
+    ns = {'s': 'http://www.w3.org/2000/svg'}
+    def hex_color(value):
+        return re.fullmatch(r'#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?', value or '') is not None
+
+    class Badges(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.categories = self.judgments = 0
+
+        def handle_starttag(self, tag, attrs):
+            attrs = dict(attrs)
+            classes = attrs.get('class', '').split()
+            if tag == 'span' and ('category' in classes or 'tag' in classes):
+                style = dict(part.split(':', 1) for part in attrs['style'].split(';') if part)
+                require(hex_color(style.get('color')))
+                require('margin' in style or 'margin-right' in style)
+                if 'category' in classes:
+                    self.categories += 1
+                    require(style.get('display') == 'inline-flex' and style.get('gap') == '6px')
+                else:
+                    self.judgments += 1
+                    require(hex_color(style.get('background')))
+
+    charts = {}
+    marker_count = 0
+    for name in ('index.html', 'changelog.html'):
+        page = (ROOT/'docs'/name).read_text()
+        require(not re.search(r'<i\b', page))
+        for source in re.findall(r'<svg\b.*?</svg>', page, re.S):
+            svg = ET.fromstring(source)
+            cls = svg.attrib['class']
+            require(svg.attrib['viewBox'].split()[2:] == [svg.attrib['width'], svg.attrib['height']])
+            if cls == 'category-marker':
+                marker_count += 1
+            else:
+                charts[cls.split()[-1]] = svg
+            for el in svg.iter():
+                tag = el.tag.rsplit('}', 1)[-1]
+                if tag == 'text':
+                    require(hex_color(el.get('fill')))
+                elif tag in ('line', 'polyline', 'circle', 'rect', 'path'):
+                    require(hex_color(el.get('stroke')) and float(el.get('stroke-width', '0')) > 0)
+                    require(el.get('fill') == 'none' if tag in ('line', 'polyline') else hex_color(el.get('fill')))
+        if name == 'index.html':
+            badges = Badges()
+            badges.feed(page)
+            require(badges.categories >= 4 and badges.judgments >= 3)
+            require(marker_count == badges.categories)
+    require(set(charts) == {'heatmap', 'stage-distribution', 'bump-chart', 'changelog-timeline'})
+    judgments = {'go': ('#8c4b12', '#fff0ce'), 'watch': ('#685913', '#f5f1d9'), 'no': ('#606974', '#e9edf2')}
+    for group in charts['heatmap'].findall('s:g', ns):
+        fg, bg = judgments[group.get('class').split()[-1]]
+        rect = group.find('s:rect', ns)
+        require(rect.get('fill') == bg and rect.get('stroke') == fg)
+        require(all(t.get('fill') == fg for t in group.findall('s:text', ns)))
+    categories = {'domestic': '#245fc4', 'sovereign': '#087d73', 'future': '#7846ba', 'neutral': '#606a7c'}
+    for group in charts['stage-distribution'].findall('s:g', ns):
+        color = categories[group.get('class').split()[1]]
+        for el in group:
+            if 'point' in el.get('class', '').split():
+                require(el.get('stroke') == color)
+                require(el.get('fill') == (color if el.tag.endswith('circle') else '#fff'))
+            elif el.tag.endswith('line'):
+                require(el.get('fill') == 'none' and el.get('stroke') == color)
+    for line in charts['bump-chart'].findall('.//s:polyline', ns):
+        require(line.get('fill') == 'none' and line.get('stroke') == '#5d6b7d')
+    for circle in charts['bump-chart'].findall('.//s:circle', ns):
+        require(circle.get('fill') == '#fff' and circle.get('stroke') == '#5d6b7d')
+    for circle in charts['changelog-timeline'].findall('.//s:circle', ns):
+        require(circle.get('fill') == '#285cb8' and circle.get('stroke') == '#fff')
+    css = (ROOT/'style.css').read_text()
+    require(css == (ROOT/'docs/style.css').read_text())
+    require(not re.search(r'(?:fill|stroke)\s*:\s*var\(', css))
+    require('color-mix' not in css and 'oklch' not in css)
+    for prefix in (':root:not([data-theme="light"])', ':root[data-theme="dark"]'):
+        require(prefix + ' .chart text{fill:#e2e9f4}' in css)
+        require(prefix + ' .bump-track polyline{fill:none;stroke:#a5b5ca}' in css)
+        # Match the category rule's specificity so hollow points stay hollow.
+        hollow_selectors = ['.segment.neutral .neutral-point']
+        hollow_selectors += [f'.segment.{cls} .extra-point' for cls in categories]
+        hollow_selectors += ['.category.neutral .category-marker path']
+        hollow_rule = ', '.join(prefix + ' ' + selector for selector in hollow_selectors) + '{fill:#192332}'
+        require(hollow_rule in css)
+        require(css.index(hollow_rule) > css.index(prefix + ' .segment.neutral .point'))
+        for cls, fg, bg in (('go', '#ffcc80', '#4d351d'), ('watch', '#e2d697', '#39351f'), ('no', '#b9c3d1', '#2c3645')):
+            require(prefix + f' .heat.{cls} rect{{fill:{bg};stroke:{fg}}}' in css)
+            require(prefix + f' .heat.{cls} text{{fill:{fg}}}' in css)
+            require(prefix + f' .tag.{cls}{{color:{fg}!important;background:{bg}!important}}' in css)
+        for cls, color in (('domestic', '#89b5ff'), ('sovereign', '#68d8c4'), ('future', '#c6a0ff')):
+            require(prefix + f' .category.{cls}' in css and f'fill:{color};stroke:{color}' in css)
+    forbidden = ('\u5f85\u8865', '\u5f85\u6838')
+    files = [ROOT/'build.py', ROOT/'failtest.py', ROOT/'style.css']
+    files += list((ROOT/'content').glob('*.md')) + [ROOT/'content/matrix.json']
+    files += [p for p in (ROOT/'docs').iterdir() if p.suffix in ('.html', '.css', '.txt')]
+    for path in files:
+        require(all(word not in path.read_text() for word in forbidden))
+    return '四图均有明确 SVG 颜色与尺寸；折线无填充；图例含颜色与间距；双深色覆盖、CSS 版本和源码/产物检查通过'
+
+
 def main():
     all_ok=True
     before_docs=digest_tree(ROOT/'docs')
@@ -249,7 +361,7 @@ def main():
         if WORK.exists():
             shutil.rmtree(WORK)
         WORK.mkdir()
-        checks=[('场景 1',check_matrix_failures),('场景 2',check_missing_stages),('场景 3',check_bad_cells),('原子性与回滚',check_atomicity),('产物抽查',check_output)]
+        checks=[('场景 1',check_matrix_failures),('场景 2',check_missing_stages),('场景 3',check_bad_cells),('原子性与回滚',check_atomicity),('产物抽查',check_output),('SVG 颜色与缓存',check_svg_colors)]
         for name,check in checks:
             try:
                 with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
