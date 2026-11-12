@@ -8,3 +8,6 @@ denylist*
 __pycache__/
 PUBLISH.md
 site_html/
+docs.next/
+docs.prev/
+_failtest_work/
